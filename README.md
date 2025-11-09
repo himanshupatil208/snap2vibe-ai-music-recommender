@@ -77,7 +77,7 @@ Let your photos find their rhythm. 🎶
 ## 🖼️ Demo Preview
 
 🎥 *Watch the full demo video here:*  
-*(Add your demo video link once uploaded to GitHub or YouTube)*
+*https://youtu.be/WquOnQW7Hrk*
 
 ---
 
