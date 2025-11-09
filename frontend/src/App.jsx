@@ -1,5 +1,10 @@
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+
 const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:5001";
+
+const Pill = ({ children }) => <span className="pill">{children}</span>;
+const Icon = ({ children }) => <span className="icon">{children}</span>;
+
 export default function App() {
   const [imageFile, setImageFile] = useState(null);
   const [mood, setMood] = useState("");
@@ -10,9 +15,30 @@ export default function App() {
   const [loadingSongs, setLoadingSongs] = useState(false);
   const [tracks, setTracks] = useState([]);
   const [error, setError] = useState("");
-  const onFileChange = (e) => { const f = e.target.files?.[0]; setImageFile(f || null); };
+  const [note, setNote] = useState("");
+
+  const previewUrl = useMemo(() => (imageFile ? URL.createObjectURL(imageFile) : ""), [imageFile]);
+
+  /* fun micro-UX: keyboard shortcuts */
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key.toLowerCase() === "d") detectMood();
+      if (e.key.toLowerCase() === "g") getSongs();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [imageFile, mood, region, person]);
+
+  const setFile = (f) => {
+    setImageFile(f || null);
+    setMood(""); setConfidence(null); setTracks([]); setError(""); setNote("");
+  };
+  const onChoose = (e) => setFile(e.target.files?.[0]);
+  const onDrop = (e) => { e.preventDefault(); const f = e.dataTransfer?.files?.[0]; if (f?.type?.startsWith("image/")) setFile(f); };
+  const resetImage = () => setFile(null);
+
   const detectMood = async () => {
-    if (!imageFile) { setError("Please choose an image first."); return; }
+    if (!imageFile) return setError("Please choose an image first.");
     setError(""); setLoadingMood(true);
     try {
       const fd = new FormData(); fd.append("image", imageFile);
@@ -20,37 +46,155 @@ export default function App() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Mood detection failed");
       setMood(data.mood); setConfidence(data.confidence ?? null);
-    } catch (e) { setError(e.message); } finally { setLoadingMood(false); }
+      setNote(data.explainer || `Feeling ${data.mood}.`);
+    } catch (e) { setError(e.message); }
+    finally { setLoadingMood(false); }
   };
+
   const getSongs = async () => {
-    const m = mood || "chill"; setLoadingSongs(true); setError("");
+    const m = mood || "chill";
+    setLoadingSongs(true); setError("");
     try {
       const url = new URL(`${API_BASE}/api/songs`);
-      url.searchParams.set("mood", m); url.searchParams.set("region", region);
+      url.searchParams.set("mood", m);
+      url.searchParams.set("region", region);
       if (person) url.searchParams.set("person", person);
-      const res = await fetch(url.toString()); const data = await res.json();
+      const res = await fetch(url.toString());
+      const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to fetch songs");
       setTracks(data.tracks || []);
-    } catch (e) { setError(e.message); } finally { setLoadingSongs(false); }
+    } catch (e) { setError(e.message); }
+    finally { setLoadingSongs(false); }
   };
-  return (<div className="container">
-    <header><h1>🎵 Snap2Vibe</h1><p>CLIP-powered scene & mood detection → Spotify suggestions.</p></header>
-    <section className="card"><h2>1) Upload Photo</h2><input type="file" accept="image/*" onChange={onFileChange} />{imageFile && <p className="muted">Selected: {imageFile.name}</p>}</section>
-    <section className="card"><h2>2) Detect Mood</h2><button onClick={detectMood} disabled={loadingMood || !imageFile}>{loadingMood ? "Detecting..." : "Detect Mood"}</button>{mood && (<p className="pill">Mood: {mood}{confidence != null && <> ({Math.round(confidence * 100)}%)</>}</p>)}</section>
-    <section className="card"><h2>3) Region & Optional Person</h2><div className="row">
-      <label>Region:<select value={region} onChange={(e) => setRegion(e.target.value)}>
-        <option value="US">US</option><option value="IN">IN</option><option value="GB">GB</option>
-        <option value="CA">CA</option><option value="AU">AU</option><option value="DE">DE</option>
-      </select></label>
-      <label>Singer/Actor (optional):<input type="text" placeholder="e.g., Arijit Singh" value={person} onChange={(e) => setPerson(e.target.value)} /></label>
-    </div><button onClick={getSongs} disabled={loadingSongs}>{loadingSongs ? "Fetching..." : "Get Songs"}</button></section>
-    <section className="card"><h2>4) Results</h2>{!tracks.length && <p className="muted">No tracks yet.</p>}<div className="grid">
-      {tracks.map((t) => (<div className="song" key={t.id}>{t.albumArt && <img src={t.albumArt} alt={t.name} />}
-        <div className="song-info"><div className="title">{t.name}</div><div className="artist">{t.artists}</div></div>
-        <div className="song-actions">{t.previewUrl && (<audio controls src={t.previewUrl}>Your browser does not support the audio element.</audio>)}
-          {t.externalUrl && (<a className="btn" href={t.externalUrl} target="_blank" rel="noreferrer">Open in Spotify</a>)}
-        </div></div>))}
-    </div></section>
-    {error && <div className="error">⚠️ {error}</div>}
-    <footer><p className="muted">Backend: {API_BASE}</p></footer>
-  </div>); }
+
+  const copyNote = async () => { try { await navigator.clipboard.writeText(note || ""); } catch {} };
+
+  return (
+    <div className="page">
+      {/* animated background */}
+      <div className="bg"><div className="blob b1"/><div className="blob b2"/><div className="blob b3"/></div>
+
+      <header className="topbar">
+        <div className="brand">
+          <span className="logo">🎵</span>
+          <div>
+            <h1>Snap2Vibe</h1>
+            <p>Turn any photo into a vibe, then into music.</p>
+          </div>
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <span className="badge">BETA</span>
+          <span className="backend-url">Backend: <span>{API_BASE}</span></span>
+        </div>
+      </header>
+
+      <main className="grid">
+        {/* LEFT COLUMN */}
+        <section className="card">
+          <div className="card-head"><Icon>🖼️</Icon><h2>Upload a photo</h2></div>
+          <p className="muted">Drag and drop or click to browse. JPG or PNG recommended.</p>
+
+          <div className={`drop ${imageFile ? "has-file" : ""}`} onDrop={onDrop} onDragOver={(e)=>e.preventDefault()}>
+            {!previewUrl ? (
+              <label className="drop-inner">
+                <input type="file" accept="image/*" onChange={onChoose} hidden />
+                <button className="btn btn-ghost"
+                  onClick={(e)=>{e.preventDefault();document.querySelector('input[type="file"]')?.click();}}>
+                  ⬆ Choose image
+                </button>
+              </label>
+            ) : (
+              <div className="preview"><img src={previewUrl} alt="Preview" /></div>
+            )}
+          </div>
+
+          <div className="row space">
+            <button className="btn btn-ghost" onClick={resetImage} disabled={!imageFile}>↺ Reset</button>
+          </div>
+
+          <div className="control-bar">
+            <div className="row">
+              <label className="field">
+                <span>Region</span>
+                <select value={region} onChange={(e)=>setRegion(e.target.value)}>
+                  {["US","IN","GB","CA","AU","DE","FR","BR","JP","SG"].map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </label>
+
+              <label className="field">
+                <span>Artist (optional)</span>
+                <input placeholder="arijit singh" value={person} onChange={(e)=>setPerson(e.target.value)} />
+              </label>
+            </div>
+
+            <button className="btn btn-primary full" onClick={getSongs} disabled={loadingSongs}>
+              {loadingSongs ? "Generating…" : "Generate vibe"}
+            </button>
+          </div>
+        </section>
+
+        {/* RIGHT COLUMN */}
+        <section className="stack">
+          <section className="card">
+            <div className="card-head"><Icon>⚙️</Icon><h2>Detected vibe</h2></div>
+
+            <div className="row row-tight">
+              <button className="btn" onClick={detectMood} disabled={loadingMood || !imageFile}>
+                {loadingMood ? "Detecting…" : "Detect mood (D)"}
+              </button>
+              {mood && <Pill> Mood: <b>{mood}</b>{confidence != null && <> ({Math.round(confidence*100)}%)</>} </Pill>}
+            </div>
+
+            <div className="note">
+              <input readOnly value={note} placeholder="Your mood summary will appear here." />
+              <button className="icon-btn" onClick={copyNote} title="Copy">📋</button>
+            </div>
+          </section>
+
+          <section className="card">
+            <div className="card-head"><Icon>🎧</Icon><h2>Song picks</h2></div>
+            <p className="muted small">Artist filter takes precedence. Fallback uses mood. Press “G” to fetch.</p>
+
+            {!tracks.length && !loadingSongs && <p className="muted">No tracks yet.</p>}
+
+            <div className="list">
+              {loadingSongs
+                ? Array.from({ length: 6 }).map((_, i) => (
+                    <div className="row-item sk" key={i}>
+                      <div className="cover sk-box" />
+                      <div className="meta"><div className="sk-line w1" /><div className="sk-line w2" /></div>
+                    </div>
+                  ))
+                : tracks.map((t) => (
+                    <div className="row-item" key={t.id || t.externalUrl}>
+                      {t.albumArt ? <img className="cover" src={t.albumArt} alt={t.name} /> : <div className="cover sk-box" />}
+                      <div className="meta">
+                        <div className="title" title={t.name}>{t.name}</div>
+                        <div className="artist" title={t.artists}>{t.artists}</div>
+                      </div>
+                      <div className="actions">
+                        {t.previewUrl && <audio controls src={t.previewUrl} />}
+                        {t.externalUrl && <a className="btn btn-ghost" href={t.externalUrl} target="_blank" rel="noreferrer">Open in Spotify</a>}
+                      </div>
+                    </div>
+                  ))}
+            </div>
+          </section>
+        </section>
+      </main>
+
+      {error && <div className="toast error"><strong>⚠️</strong> {error}</div>}
+
+      <footer className="footer">
+        <div className="footer-inner">
+          <div>© {new Date().getFullYear()} • Developed by <b>Himanshu Patil</b> , <b>Sahil Vacchani</b> & <b>Himanshu Malik</b></div>
+          <div className="links">
+            <a href="mailto:youremail@example.com">Contact</a>
+            <a href="https://github.com/himanshupatil208/snap2vibe-ai-music-recommender" target="_blank" rel="noreferrer">GitHub</a>
+            <a href="https://www.linkedin.com/in/" target="_blank" rel="noreferrer">LinkedIn</a>
+          </div>
+        </div>
+      </footer>
+    </div>
+  );
+}
