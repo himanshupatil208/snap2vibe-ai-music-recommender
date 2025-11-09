@@ -91,7 +91,7 @@ Let your photos find their rhythm. 🎶
 
 
 
-# Snap2Vibe Setup(CLIP Upgrade) 
+# Snap2Vibe Setup
 
 This version uses **OpenCLIP ViT-B/32** to detect scene/mood (rainy, sunny, cozy, romantic, sad, party, etc.) and returns a canonical mood (e.g., `rainy`, `happy`) + confidence. The frontend displays the mood and confidence, and the Spotify recommender uses it to fetch tracks.
 
