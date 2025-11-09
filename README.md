@@ -9,6 +9,9 @@ This version uses **OpenCLIP ViT-B/32** to detect scene/mood (rainy, sunny, cozy
 cd backend
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
+If PowerShell blocks scripts:
+Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
+
 pip install -r requirements.txt
 
 # Configure Spotify (choose one) in backend/.env:
